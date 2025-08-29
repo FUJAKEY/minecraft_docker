@@ -1,39 +1,39 @@
-# Ubuntu + sudo + Java 17 + Paper 1.16.5 (build 794)
-FROM ubuntu:22.04
+# Java 16 (совместимо с Paper 1.16.5)
+FROM eclipse-temurin:16-jre
 
-# 1) apt update и установка sudo, Java 17 и curl
+# apt update + утилиты (sudo по твоей просьбе)
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        sudo curl ca-certificates openjdk-17-jre-headless && \
+        sudo curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# 2) Путь к jar и к данным
+# Пути
 ENV MC_HOME=/opt/mc
 ENV DATA_DIR=/dontdelete
 
-# 3) Скачиваем Paper в область образа, НЕ в DATA_DIR
+# Скачиваем Paper 1.16.5 build 794 в область образа (чтобы том не "перекрывал" jar)
 RUN mkdir -p "$MC_HOME" && \
     curl -fsSL -o "$MC_HOME/server.jar" \
       "https://api.papermc.io/v2/projects/paper/versions/1.16.5/builds/794/downloads/paper-1.16.5-794.jar" && \
     chmod 644 "$MC_HOME/server.jar"
 
-# 4) Рабочая директория с данными (будет том)
+# Рабочая директория с данными сервера (сюда монтируй Volume)
 WORKDIR $DATA_DIR
 
-# 5) Создаём стандартные папки (если том пустой при первом старте)
+# Базовые папки, если том пустой
 RUN mkdir -p "$DATA_DIR/world" "$DATA_DIR/plugins" "$DATA_DIR/logs" "$DATA_DIR/tmp"
 
-# 6) Экспонируем порт Java-версии
+# Порт Java-версии
 EXPOSE 25565/tcp
 
-# 7) Настройка памяти и путей
-ENV MEMORY=5G
+# Память берём из переменной окружения
+ENV MEMORY=2G
 ENV JVM_EXTRA="-XX:+UseG1GC -Duser.home=/dontdelete -Djava.io.tmpdir=/dontdelete/tmp"
 
-# 8) Помечаем /dontdelete как постоянные данные
+# Помечаем данные как постоянные
 VOLUME ["/dontdelete"]
 
-# 9) Точка входа: создаёт eula.txt при первом запуске и стартует сервер
+# Точка входа
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
