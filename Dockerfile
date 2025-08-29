@@ -7,31 +7,34 @@ RUN apt-get update && \
         sudo curl ca-certificates openjdk-17-jre-headless && \
     rm -rf /var/lib/apt/lists/*
 
-# 2) Все данные сервера — в /dontdelete
-WORKDIR /dontdelete
+# 2) Путь к jar и к данным
+ENV MC_HOME=/opt/mc
+ENV DATA_DIR=/dontdelete
 
-# 3) Принять EULA (если файл уже есть на томе — не трогаем)
-RUN [ ! -f eula.txt ] && echo "eula=true" > eula.txt || true
+# 3) Скачиваем Paper в область образа, НЕ в DATA_DIR
+RUN mkdir -p "$MC_HOME" && \
+    curl -fsSL -o "$MC_HOME/server.jar" \
+      "https://api.papermc.io/v2/projects/paper/versions/1.16.5/builds/794/downloads/paper-1.16.5-794.jar" && \
+    chmod 644 "$MC_HOME/server.jar"
 
-# 4) Скачиваем Paper 1.16.5 build 794 как server.jar
-RUN curl -fsSL \
-  -o server.jar \
-  "https://api.papermc.io/v2/projects/paper/versions/1.16.5/builds/794/downloads/paper-1.16.5-794.jar" \
-  && chmod 644 server.jar
+# 4) Рабочая директория с данными (будет том)
+WORKDIR $DATA_DIR
 
-# 5) Создаём стандартные директории (на случай чистого тома)
-RUN mkdir -p /dontdelete/world /dontdelete/plugins /dontdelete/logs /dontdelete/tmp
+# 5) Создаём стандартные папки (если том пустой при первом старте)
+RUN mkdir -p "$DATA_DIR/world" "$DATA_DIR/plugins" "$DATA_DIR/logs" "$DATA_DIR/tmp"
 
 # 6) Экспонируем порт Java-версии
 EXPOSE 25565/tcp
 
-# 7) Память из переменной окружения MEMORY (по умолчанию 2G)
+# 7) Настройка памяти и путей
 ENV MEMORY=5G
-# Доп. флаги: всё складываем в /dontdelete, включая кэш/временные файлы Java
 ENV JVM_EXTRA="-XX:+UseG1GC -Duser.home=/dontdelete -Djava.io.tmpdir=/dontdelete/tmp"
 
-# 8) Подсказываем рантайму, что это постоянные данные
+# 8) Помечаем /dontdelete как постоянные данные
 VOLUME ["/dontdelete"]
 
-# 9) Старт: память = $MEMORY, все пути внутри /dontdelete
-CMD sh -c 'exec java -Xms${MEMORY:-2G} -Xmx${MEMORY:-2G} ${JVM_EXTRA} -jar server.jar --nogui'
+# 9) Точка входа: создаёт eula.txt при первом запуске и стартует сервер
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+CMD ["/entrypoint.sh"]
